@@ -12,20 +12,22 @@ char GetChar((int line, int character) c)
         ? input[c.line][c.character]
         : '_';
 
-bool IsXmas((int line, int character) c1, (int line, int character) c2, (int line, int character) c3, (int line, int character) c4)
-    => (GetChar(c1) == 'X'
-        && GetChar(c2) == 'M'
-        && GetChar(c3) == 'A'
-        && GetChar(c4) == 'S')
+bool IsMas((int line, int character) c1, (int line, int character) c2, (int line, int character) c3)
+    => (GetChar(c1) == 'M'
+        && GetChar(c2) == 'A'
+        && GetChar(c3) == 'S')
        ||
-       (GetChar(c4) == 'X'
-        && GetChar(c3) == 'M'
+       (GetChar(c3) == 'M'
         && GetChar(c2) == 'A'
         && GetChar(c1) == 'S');
 
-void CountXmas((int line, int character) c1, (int line, int character) c2, (int line, int character) c3, (int line, int character) c4)
+bool IsXMas(int line, int character)
+    => IsMas((line, character), (line + 1, character + 1), (line + 2, character + 2))
+       && IsMas((line, character + 2), (line + 1, character + 1), (line + 2, character));
+
+void CountXMas(int line, int character)
 {
-    if (IsXmas(c1, c2, c3, c4))
+    if (IsXMas(line, character))
         result += 1;
 }
 
@@ -35,10 +37,7 @@ var lineLength = input[0].Length;
 for (var i = 0; i < lineCount; i++)
 for (var j = 0; j < lineLength; j++)
 {
-    CountXmas((i, j), (i, j + 1), (i, j + 2), (i, j + 3));
-    CountXmas((i, j), (i + 1, j), (i + 2, j), (i + 3, j));
-    CountXmas((i, j), (i + 1, j + 1), (i + 2, j + 2), (i + 3, j + 3));
-    CountXmas((i, j), (i - 1, j + 1), (i - 2, j + 2), (i - 3, j + 3));
+    CountXMas(i, j);
 }
 
 Console.WriteLine(result);
