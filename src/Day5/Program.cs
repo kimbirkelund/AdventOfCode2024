@@ -28,8 +28,33 @@ var correctlyOrderedUpdates =
 
 Console.WriteLine($"Correctly ordered updates: {correctlyOrderedUpdates.Count}");
 
-var sumOfMiddlePages =
+var sumOfMiddlePagesOfCorrectlyOrderedUpdates =
     correctlyOrderedUpdates.Select(o => o[o.Count / 2])
                            .Select(int.Parse)
                            .Sum();
-Console.WriteLine($"Sum of middle pages: {sumOfMiddlePages}");
+Console.WriteLine($"Sum of middle pages of correctly ordered updates: {sumOfMiddlePagesOfCorrectlyOrderedUpdates}");
+
+var incorrectlyOrderedUpdates = updates.Except(correctlyOrderedUpdates).ToList();
+
+Console.WriteLine($"Incorrectly ordered updates: {incorrectlyOrderedUpdates.Count}");
+
+IReadOnlyList<string> FixIncorrectlyOrdered(IReadOnlyList<string> update)
+{
+    var fixedOrder =
+        update.OrderByDescending(v => update.Except([v])
+                                            .Count(ov => orders[v].Contains(ov)))
+              .ToList();
+    return fixedOrder;
+}
+
+var fixedOrderUpdates =
+    incorrectlyOrderedUpdates.Select(FixIncorrectlyOrdered)
+                             .ToList();
+
+Console.WriteLine($"Fixed updates: {fixedOrderUpdates.Count}");
+
+var sumOfMiddlePagesOfFixedUpdates =
+    fixedOrderUpdates.Select(o => o[o.Count / 2])
+                     .Select(int.Parse)
+                     .Sum();
+Console.WriteLine($"Sum of middle pages of fixed ordered updates: {sumOfMiddlePagesOfFixedUpdates}");
