@@ -1,11 +1,13 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Globalization;
+using System.Text.RegularExpressions;
 
 var input = File.ReadAllLines("input.txt");
 
 IOperator[] operators =
 [
     new Addition(),
-    new Multiply()
+    new Multiply(),
+    new Concatenation()
 ];
 
 IEnumerable<IEnumerable<IOperator>> GetAllCombinationsOfOperators(int size)
@@ -86,4 +88,19 @@ internal class Multiply : IOperator
 
     public override string ToString()
         => "*";
+}
+
+internal class Concatenation : IOperator
+{
+    public long Evaluate(long left, long right)
+    {
+        var leftStr = left.ToString(CultureInfo.InvariantCulture);
+        var rightStr = right.ToString(CultureInfo.InvariantCulture);
+        return long.Parse(leftStr + rightStr, CultureInfo.InvariantCulture);
+    }
+
+    public override string ToString()
+    {
+        return "||";
+    }
 }
