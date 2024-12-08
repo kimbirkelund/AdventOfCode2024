@@ -26,12 +26,12 @@ static IEnumerable<( Coordinate first, Coordinate second)> GetAllPairs(IEnumerab
 var mininum = new Coordinate(0, 0);
 var maxinum = new Coordinate(input.Length - 1, input[^1].Length - 1);
 
-bool InBounds(Coordinate c)
+bool InBounds(Coordinate coord)
 {
-    return c.Line >= 0
-           && c.Line < input.Length
-           && c.Column >= 0
-           && c.Column < input[^1].Length;
+    return coord.Line >= mininum.Line
+           && coord.Line <= maxinum.Line
+           && coord.Column >= mininum.Column
+           && coord.Column <= maxinum.Column;
 }
 
 IEnumerable<(char frequency, Coordinate coord, Coordinate antenna1, Coordinate antenna2)> GetAllAntiNodes(ILookup<char, Coordinate> antennas)
@@ -45,16 +45,21 @@ IEnumerable<(char frequency, Coordinate coord, Coordinate antenna1, Coordinate a
 
         foreach (var (first, second) in allPairs)
         {
-            var dist = first - second;
+            var bearing = Coordinate.Bearing(first, second);
 
-            var firstAntiNode = first + dist;
-            var secondAntiNode = second - dist;
+            var antiNode = first;
+            while (InBounds(antiNode))
+            {
+                yield return (g.Key, antiNode, first, second);
+                antiNode -= bearing;
+            }
 
-            if (InBounds(firstAntiNode))
-                yield return (g.Key, firstAntiNode, first, second);
-
-            if (InBounds(secondAntiNode))
-                yield return (g.Key, secondAntiNode, first, second);
+            antiNode = first + bearing;
+            while (InBounds(antiNode))
+            {
+                yield return (g.Key, antiNode, first, second);
+                antiNode += bearing;
+            }
         }
     }
 }
@@ -87,8 +92,28 @@ internal readonly record struct Coordinate(int Line, int Column) : IComparable<C
         return $"({Line}, {Column})";
     }
 
-    public static Coordinate Abs(Coordinate second)
-        => new(Math.Abs(second.Line), Math.Abs(second.Column));
+    public static Coordinate Bearing(Coordinate a, Coordinate b)
+    {
+        var bearing = b - a;
+
+        double divisor = Math.Min(Math.Abs(bearing.Line), Math.Abs(bearing.Column));
+
+        while (divisor > 1)
+        {
+            var newLine = bearing.Line / divisor;
+            var newColumn = bearing.Column / divisor;
+
+            if (double.IsInteger(newLine) && double.IsInteger(newColumn))
+            {
+                bearing = new Coordinate((int)newLine, (int)newColumn);
+                divisor = Math.Min(Math.Abs(bearing.Line), Math.Abs(bearing.Column));
+            }
+            else
+                divisor--;
+        }
+
+        return bearing;
+    }
 
     public static Coordinate operator +(Coordinate a, Coordinate b)
         => new(a.Line + b.Line, a.Column + b.Column);
