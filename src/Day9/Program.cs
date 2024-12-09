@@ -31,19 +31,66 @@ void Compact()
     var frontIndex = 0;
     var backIndex = disk.Length - 1;
 
+    (int startIndex, int length)? FindNextFile(FileId fileIdToFind)
+    {
+        while (disk[backIndex] != fileIdToFind && backIndex > frontIndex)
+            backIndex--;
+        if (backIndex <= frontIndex)
+            return null;
+
+        var length = 0;
+        while (disk[backIndex] == fileIdToFind && backIndex > frontIndex)
+        {
+            backIndex--;
+            length++;
+        }
+
+        return (backIndex + 1, length);
+    }
+
+    int? FindMatchingFreeSpace(int requiredLength)
+    {
+        while (disk[frontIndex] is { } && frontIndex <= backIndex)
+            frontIndex++;
+        if (frontIndex > backIndex)
+            return null;
+
+        var index = frontIndex;
+        while (true)
+        {
+            while (disk[index] is { } && index <= backIndex)
+                index++;
+            if (index > backIndex)
+                return null;
+
+            var length = 0;
+            while (disk[index] is null && index <= backIndex)
+            {
+                index++;
+                length++;
+
+                if (length >= requiredLength)
+                    return index - length;
+            }
+        }
+    }
+
+    var nextFileIdToMove = nextFileId.Previous();
     while (frontIndex < backIndex)
     {
-        while (disk[frontIndex] is { })
-            frontIndex++;
+        if (FindNextFile(nextFileIdToMove) is not (var (fileStartIndex, fileLength)))
+            return;
 
-        while (disk[backIndex] is null)
-            backIndex--;
+        if (FindMatchingFreeSpace(fileLength) is { } emptyStartIndex)
+        {
+            for (var i = 0; i < fileLength; i++)
+            {
+                disk[emptyStartIndex + i] = nextFileIdToMove;
+                disk[fileStartIndex + i] = null;
+            }
+        }
 
-        if (frontIndex > backIndex)
-            break;
-
-        disk[frontIndex] = disk[backIndex];
-        disk[backIndex] = null;
+        nextFileIdToMove = nextFileIdToMove.Previous();
     }
 }
 
@@ -66,10 +113,13 @@ var checksum = ComputeChecksum();
 Console.WriteLine($"Checksum: {checksum}");
 
 [DebuggerDisplay("{Value}")]
-internal record FileId(int Value)
+internal record FileId(long Value)
 {
     public FileId Next()
         => new(Value + 1);
+
+    public FileId Previous()
+        => new(Value - 1);
 
     public override string ToString()
         => $"{Value}";
