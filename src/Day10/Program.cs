@@ -52,12 +52,15 @@ var trailsByHead =
 
 foreach (var (trailHead, trails) in trailsByHead)
 {
-    Console.WriteLine($"{trailHead} (score: {trails.Select(t => t.Last()).Distinct().Count()}):");
+    Console.WriteLine($"{trailHead} (score: {trails.Select(t => t.Last()).Distinct().Count()}, rating: {trails.Length}):");
     Console.WriteLine(string.Join("\n", trails.Select(t => $"  {string.Join(", ", t.Select(p => $"({p.Line}, {p.Column}, {At(p)})"))}")));
 }
 
 var sumOfScores = trailsByHead.Select(t => t.trails.Select(t => t.Last()).Distinct().Count()).Sum();
 Console.WriteLine($"Sum of scores: {sumOfScores}");
+
+var sumOfRatings = trailsByHead.Select(t => t.trails.Length).Sum();
+Console.WriteLine($"Sum of ratings: {sumOfRatings}");
 
 internal readonly record struct Coordinate(int Line, int Column) : IComparable<Coordinate>
 {
