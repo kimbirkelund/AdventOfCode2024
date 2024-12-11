@@ -1,91 +1,58 @@
-﻿using System.Collections;
+﻿using System.Collections.Immutable;
+using System.Diagnostics;
 
 var input = File.ReadAllText("input.txt").Trim();
 
-var leftMostStone =
+var initialStones =
     input.Split(" ")
-         .Select(long.Parse).Reverse()
-         .Aggregate((Stone?)null,
-                    (a, b) => new Stone(b, a))
-    ?? throw new Exception("Input is empty.");
+         .Select(long.Parse)
+         .ToList();
 
-Blink(25);
+var blinkCount = 25;
+var mutex = new object();
 
-PrintStones(leftMostStone);
+var swTotal = Stopwatch.StartNew();
+var totalStoneCount =
+    initialStones
+        .AsParallel()
+        .Select(v =>
+                {
+                    lock (mutex)
+                        Console.WriteLine($"Blinking {v} {blinkCount} times...");
 
-var totalStoneCount = leftMostStone.Count();
+                    var sw = Stopwatch.StartNew();
+
+                    var blink = Blink(v, blinkCount);
+
+                    sw.Stop();
+                    lock (mutex)
+                        Console.WriteLine($"Blinking {v} {blinkCount} times took {sw}. {sw.Elapsed}");
+
+                    return blink;
+                })
+        .Sum();
+swTotal.Stop();
+Console.WriteLine($"Blinking {blinkCount} times took {swTotal.Elapsed}.");
 
 Console.WriteLine($"Total Stone Count: {totalStoneCount}");
 
-void PrintStones(Stone stone)
+var cache = ImmutableDictionary<(long value, int remainingBlinks), long>.Empty;
+
+long Blink(long value, int numberOfBlinks)
 {
-    Console.Write($"{stone.Value}");
-    var current = stone.Right;
-    while (current is { Value: var value, Right: var right })
+    if (numberOfBlinks == 0)
+        return 1;
+    if (value is 0)
+        return Blink(1, numberOfBlinks - 1);
+
+    if (value.ToString() is { } strValue && strValue.Length % 2 == 0)
     {
-        Console.Write($" {value}");
-        current = right;
+        var leftValue = long.Parse(strValue[..(strValue.Length / 2)]);
+        var rightValue = long.Parse(strValue[(strValue.Length / 2)..]);
+
+        return Blink(leftValue, numberOfBlinks - 1)
+               + Blink(rightValue, numberOfBlinks - 1);
     }
 
-    Console.WriteLine();
-}
-
-void Blink(int count)
-{
-    for (var i = 0; i < count; i++)
-    {
-        leftMostStone = Stone.EvolveAll(leftMostStone);
-    }
-}
-
-internal class Stone(long value, Stone? right) : IEnumerable<Stone>
-{
-    public long Value { get; } = value;
-    public Stone? Right { get; private set; } = right;
-
-    public IEnumerator<Stone> GetEnumerator()
-    {
-        var current = this;
-        while (current is not null)
-        {
-            yield return current;
-            current = current.Right;
-        }
-    }
-
-    private Stone EvolveSingle()
-    {
-        if (Value is 0)
-            return new Stone(1, Right);
-
-        if (Value.ToString() is { } strValue && strValue.Length % 2 == 0)
-        {
-            var leftValue = long.Parse(strValue[..(strValue.Length / 2)]);
-            var rightValue = long.Parse(strValue[(strValue.Length / 2)..]);
-            return new Stone(leftValue, new Stone(rightValue, Right));
-        }
-
-        return new Stone(Value * 2024, Right);
-    }
-
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return GetEnumerator();
-    }
-
-    public static Stone EvolveAll(Stone leftMost)
-    {
-        var stack = new Stack<Stone>(leftMost);
-
-        while (true)
-        {
-            var current = stack.Pop();
-            current = current.EvolveSingle();
-
-            if (stack.TryPeek(out var left))
-                left.Right = current;
-            else
-                return current;
-        }
-    }
+    return Blink(value * 2024, numberOfBlinks - 1);
 }
