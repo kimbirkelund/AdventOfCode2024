@@ -1,14 +1,18 @@
 ﻿using System.Collections.Immutable;
 using System.Diagnostics;
 
+var cache = ImmutableDictionary<(long value, int remainingBlinks), long>.Empty;
+long cacheHits = 0;
+
 var input = File.ReadAllText("input.txt").Trim();
+
 
 var initialStones =
     input.Split(" ")
          .Select(long.Parse)
          .ToList();
 
-var blinkCount = 25;
+var blinkCount = 75;
 var mutex = new object();
 
 var swTotal = Stopwatch.StartNew();
@@ -33,26 +37,35 @@ var totalStoneCount =
         .Sum();
 swTotal.Stop();
 Console.WriteLine($"Blinking {blinkCount} times took {swTotal.Elapsed}.");
-
+Console.WriteLine($"Cache hits: {cacheHits}");
 Console.WriteLine($"Total Stone Count: {totalStoneCount}");
-
-var cache = ImmutableDictionary<(long value, int remainingBlinks), long>.Empty;
 
 long Blink(long value, int numberOfBlinks)
 {
-    if (numberOfBlinks == 0)
-        return 1;
-    if (value is 0)
-        return Blink(1, numberOfBlinks - 1);
+    if (cache.TryGetValue((value, numberOfBlinks), out var stoneCount))
+    {
+        Interlocked.Increment(ref cacheHits);
+        return stoneCount;
+    }
 
-    if (value.ToString() is { } strValue && strValue.Length % 2 == 0)
+    long result;
+
+    if (numberOfBlinks == 0)
+        result = 1;
+    else if (value is 0)
+        result = Blink(1, numberOfBlinks - 1);
+    else if (value.ToString() is { } strValue && strValue.Length % 2 == 0)
     {
         var leftValue = long.Parse(strValue[..(strValue.Length / 2)]);
         var rightValue = long.Parse(strValue[(strValue.Length / 2)..]);
 
-        return Blink(leftValue, numberOfBlinks - 1)
-               + Blink(rightValue, numberOfBlinks - 1);
+        result = Blink(leftValue, numberOfBlinks - 1)
+                 + Blink(rightValue, numberOfBlinks - 1);
     }
+    else
+        result = Blink(value * 2024, numberOfBlinks - 1);
 
-    return Blink(value * 2024, numberOfBlinks - 1);
+    ImmutableInterlocked.TryAdd(ref cache, (value, numberOfBlinks), result);
+
+    return result;
 }
