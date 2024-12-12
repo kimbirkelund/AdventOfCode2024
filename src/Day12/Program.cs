@@ -16,6 +16,7 @@ Console.WriteLine(string.Join("\n", regions));
 Console.WriteLine($"Expected total area: {input.Count()}");
 Console.WriteLine($"Total area: {regions.Sum(r => r.Area)}");
 Console.WriteLine($"Total price: {regions.Sum(r => r.Price)}");
+Console.WriteLine($"Total bulk price: {regions.Sum(r => r.BulkPrice)}");
 
 internal class Input : IEnumerable<(int line, int column, char type)>
 {
@@ -69,9 +70,11 @@ internal record Plot(Input Input, int Line, int Column, char Type)
 internal class Region
 {
     public int Area => Plots.Count;
+    public int BulkPrice => Area * Sides;
     public int Perimeter { get; }
     public IReadOnlyCollection<Plot> Plots { get; }
     public int Price => Area * Perimeter;
+    public int Sides { get; }
     public char Type { get; }
 
     public Region(Input input, Plot topLeftMostPlot)
@@ -82,6 +85,7 @@ internal class Region
         Expand(plots, topLeftMostPlot);
         Plots = [..plots.Distinct()];
         Perimeter = Plots.Sum(ComputePerimeter);
+        Sides = CountSides();
     }
 
     public bool Contains(Plot plot)
@@ -100,6 +104,108 @@ internal class Region
                + (plot.Right?.Type == plot.Type ? 0 : 1);
     }
 
+    private int CountSides()
+    {
+        HashSet<(Plot, Side)> sides = new();
+
+        foreach (var plot in Plots)
+        {
+            if (plot.Left?.Type != Type)
+            {
+                var current = plot;
+                while (true)
+                {
+                    if (current.Up?.Type == Type)
+                    {
+                        if (current.Up.Left?.Type == Type)
+                        {
+                            sides.Add((current, Side.Left));
+                            break;
+                        }
+
+                        current = current.Up;
+                    }
+                    else
+                    {
+                        sides.Add((current, Side.Left));
+                        break;
+                    }
+                }
+            }
+
+            if (plot.Up?.Type != Type)
+            {
+                var current = plot;
+                while (true)
+                {
+                    if (current.Left?.Type == Type)
+                    {
+                        if (current.Left.Up?.Type == Type)
+                        {
+                            sides.Add((current, Side.Top));
+                            break;
+                        }
+
+                        current = current.Left;
+                    }
+                    else
+                    {
+                        sides.Add((current, Side.Top));
+                        break;
+                    }
+                }
+            }
+
+            if (plot.Right?.Type != Type)
+            {
+                var current = plot;
+                while (true)
+                {
+                    if (current.Up?.Type == Type)
+                    {
+                        if (current.Up.Right?.Type == Type)
+                        {
+                            sides.Add((current, Side.Right));
+                            break;
+                        }
+
+                        current = current.Up;
+                    }
+                    else
+                    {
+                        sides.Add((current, Side.Right));
+                        break;
+                    }
+                }
+            }
+
+            if (plot.Down?.Type != Type)
+            {
+                var current = plot;
+                while (true)
+                {
+                    if (current.Left?.Type == Type)
+                    {
+                        if (current.Left.Down?.Type == Type)
+                        {
+                            sides.Add((current, Side.Bottom));
+                            break;
+                        }
+
+                        current = current.Left;
+                    }
+                    else
+                    {
+                        sides.Add((current, Side.Bottom));
+                        break;
+                    }
+                }
+            }
+        }
+
+        return sides.Count;
+    }
+
     private void Expand(List<Plot> plots, Plot? plot)
     {
         if (plot is null || plots.Contains(plot))
@@ -114,5 +220,13 @@ internal class Region
         Expand(plots, plot.Up);
         Expand(plots, plot.Right);
         Expand(plots, plot.Down);
+    }
+
+    private enum Side
+    {
+        Left,
+        Top,
+        Right,
+        Bottom
     }
 }
