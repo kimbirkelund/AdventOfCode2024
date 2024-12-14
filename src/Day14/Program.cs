@@ -11,8 +11,25 @@ var seconds = 0;
 var speed = 0;
 var stepOne = 0;
 
+void GoTo(int targetSeconds)
+{
+    var change = targetSeconds < seconds ? -1 : 1;
+    while (targetSeconds != seconds)
+    {
+        foreach (var robot in robots)
+        {
+            if (change < 0)
+                robot.MoveBackward();
+            else
+                robot.MoveForward();
+        }
+
+        seconds += change;
+    }
+}
 
 var waitHandle = new AutoResetEvent(initialState: false);
+var waitWaitHandle = new ManualResetEvent(false);
 
 Task.Run(() =>
          {
@@ -36,6 +53,25 @@ Task.Run(() =>
                      speed = 0;
                      stepOne = 1;
                  }
+                 else if (key.Key == ConsoleKey.G)
+                 {
+                     speed = 0;
+
+                     waitWaitHandle.Reset();
+                     waitHandle.Set();
+                     waitWaitHandle.WaitOne();
+
+                     while (true)
+                     {
+                         Console.Write("Enter target seconds: ");
+                         if (int.TryParse(Console.ReadLine(), out var targetSeconds))
+                         {
+                             GoTo(targetSeconds);
+                             Console.Clear();
+                             break;
+                         }
+                     }
+                 }
 
                  waitHandle.Set();
              }
@@ -48,24 +84,19 @@ while (true)
     var actualSpeed = speed + stepOne;
     if (actualSpeed != 0)
     {
-        foreach (var robot in robots)
-        {
-            if (actualSpeed < 0)
-                robot.MoveBackward();
-            else
-                robot.MoveForward();
-        }
-
-        seconds += actualSpeed < 0 ? -1 : 1;
+        GoTo(seconds + (actualSpeed < 0 ? -1 : 1));
     }
 
     stepOne = 0;
 
     Console.SetCursorPosition(0, 0);
     Console.WriteLine($"Seconds: {seconds}, speed: {speed}".PadRight(Robot.AreaWidth, ' '));
+    Console.WriteLine("Up/down changes speed, left/right steps 1, space pauses, g to go to specific seconds".PadRight(Robot.AreaWidth, ' '));
+    Console.WriteLine();
     PrintFloorMap();
     Console.WriteLine();
 
+    waitWaitHandle.Set();
     waitHandle.WaitOne(speed == 0 ? Timeout.Infinite : 1000 / Math.Abs(speed));
 }
 
