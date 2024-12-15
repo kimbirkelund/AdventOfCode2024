@@ -37,21 +37,22 @@ foreach (var line in input)
     }
 }
 
-var map = new Map(maxX, maxY);
+var map = new Map(maxX * 2, maxY);
 foreach (var (x, y, contents) in occupants)
 {
     switch (contents)
     {
         case '#':
-            _ = new Wall(map, x, y);
+            _ = new Wall(map, x * 2, y);
+            _ = new Wall(map, x * 2 + 1, y);
             break;
         case 'O':
-            _ = new Box(map, x, y);
+            _ = new WideBox(map, x * 2, y);
             break;
         case '@':
             if (robot is { })
                 throw new Exception("Robot is already occupied");
-            robot = new Robot(map, x, y);
+            robot = new Robot(map, x * 2, y);
             break;
     }
 }
@@ -59,17 +60,38 @@ foreach (var (x, y, contents) in occupants)
 if (robot is null)
     throw new Exception("Robot is empty");
 
+Console.WriteLine("Initial state:");
 Console.WriteLine(map);
+Console.WriteLine();
 
 foreach (var robotMove in robotMoves)
-    robot.Move(robotMove);
+{
+    if (robot.CanMove(robotMove))
+    {
+        try
+        {
+            robot.Move(robotMove);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.WriteLine($"Exception: {ex.Message}");
+            Console.WriteLine($"Move {robotMove}: ");
+            Console.WriteLine(map);
+            return -1;
+        }
+    }
+
+    // Console.WriteLine($"Move {robotMove}:");
+    // Console.WriteLine(map);
+    // Console.WriteLine();
+}
 
 Console.WriteLine();
 Console.WriteLine(map);
 
-var sumOfAllGpsCoordinates = map.OfType<Box>().Sum(b => b.Gps);
+var sumOfAllGpsCoordinates = map.OfType<IHasGpsCoordinates>().Sum(b => b.Gps);
 Console.WriteLine($"Sum of all gps is {sumOfAllGpsCoordinates}");
-
+return 0;
 
 internal enum Direction
 {
@@ -83,7 +105,8 @@ internal interface IOccupant
 {
     int X { get; }
     int Y { get; }
-    bool Move(Direction direction);
+    bool CanMove(Direction direction);
+    void Move(Direction direction);
 }
 
 internal abstract class OccupantBase : IOccupant
@@ -101,13 +124,16 @@ internal abstract class OccupantBase : IOccupant
         map[x, y] = this;
     }
 
-    public abstract bool Move(Direction direction);
+    public abstract bool CanMove(Direction direction);
+    public abstract void Move(Direction direction);
 }
 
 internal class MovableOccupantBase(Map map, int x, int y)
     : OccupantBase(map, x, y)
 {
-    public override bool Move(Direction direction)
+    protected virtual bool PerformCanMoveCheckOnMove => true;
+
+    public override bool CanMove(Direction direction)
     {
         var (nextX, nextY) = direction switch
         {
@@ -121,34 +147,125 @@ internal class MovableOccupantBase(Map map, int x, int y)
         if (!Map.IsValidPosition(nextX, nextY))
             return false;
 
-        if (Map[nextX, nextY] is not { } occupant || occupant.Move(direction))
+        if (Map[nextX, nextY] is not { } occupant || occupant.CanMove(direction))
         {
-            Map[X, Y] = null;
-            Map[nextX, nextY] = this;
-            X = nextX;
-            Y = nextY;
             return true;
         }
 
         return false;
     }
+
+    public override void Move(Direction direction)
+    {
+        if (PerformCanMoveCheckOnMove && !CanMove(direction))
+            throw new InvalidOperationException("Can't move in that direction");
+
+        var (nextX, nextY) = direction switch
+        {
+            Direction.Left => (X - 1, Y),
+            Direction.Up => (X, Y - 1),
+            Direction.Right => (X + 1, Y),
+            Direction.Down => (X, Y + 1),
+            _ => throw new ArgumentOutOfRangeException(nameof(direction), direction, null)
+        };
+
+        Map[nextX, nextY]?.Move(direction);
+        Map[X, Y] = null;
+        Map[nextX, nextY] = this;
+        X = nextX;
+        Y = nextY;
+    }
 }
 
 internal class Wall(Map map, int x, int y) : OccupantBase(map, x, y)
 {
-    public override bool Move(Direction direction)
+    public override bool CanMove(Direction direction)
         => false;
+
+    public override void Move(Direction direction) { }
 
     public override string ToString()
         => "#";
 }
 
-internal class Box(Map map, int x, int y) : MovableOccupantBase(map, x, y)
+internal interface IHasGpsCoordinates : IOccupant
 {
-    public int Gps => Y * 100 + X;
+    int Gps => ComputeGpsCoordinates(X, Y);
 
+    static int ComputeGpsCoordinates(int x, int y)
+        => y * 100 + x;
+}
+
+internal class Box(Map map, int x, int y) : MovableOccupantBase(map, x, y), IHasGpsCoordinates
+{
     public override string ToString()
         => "O";
+}
+
+internal class WideBox : MovableOccupantBase, IHasGpsCoordinates
+{
+    private readonly bool _leftPart;
+    private readonly WideBox _other;
+
+    public int Gps => _leftPart ? IHasGpsCoordinates.ComputeGpsCoordinates(X, Y) : 0;
+
+    protected override bool PerformCanMoveCheckOnMove => _leftPart;
+
+    private WideBox(Map map, int x, int y, WideBox other)
+        : base(map, x, y)
+    {
+        _other = other;
+    }
+
+    public WideBox(Map map, int x, int y)
+        : base(map, x, y)
+    {
+        _leftPart = true;
+        _other = new WideBox(map, x + 1, y, this);
+    }
+
+    public override bool CanMove(Direction direction)
+    {
+        if (!_leftPart)
+            return _other.CanMove(direction);
+
+        return direction switch
+        {
+            Direction.Left => BaseCanMove(direction),
+            Direction.Right => _other.X != X + 1 || _other.BaseCanMove(direction),
+            _ => BaseCanMove(direction) && _other.BaseCanMove(direction)
+        };
+    }
+
+    public override void Move(Direction direction)
+    {
+        if (!_leftPart)
+        {
+            _other.Move(direction);
+            return;
+        }
+
+        switch (direction)
+        {
+            case Direction.Right:
+                _other.BaseMove(direction);
+                BaseMove(direction);
+                break;
+            default:
+                BaseMove(direction);
+                _other.BaseMove(direction);
+                break;
+        }
+    }
+
+    public override string ToString()
+        => _leftPart ? "[" : "]";
+
+    private bool BaseCanMove(Direction direction)
+        => base.CanMove(direction);
+
+    private void BaseMove(Direction direction)
+        => base.Move(direction);
 }
 
 internal class Robot(Map map, int x, int y) : MovableOccupantBase(map, x, y)
