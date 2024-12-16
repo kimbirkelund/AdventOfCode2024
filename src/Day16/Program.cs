@@ -6,11 +6,15 @@ var input = File.ReadAllLines("input.txt");
 var inputMaze = new Maze(input);
 Console.WriteLine(inputMaze);
 
-int FindCheapestPath(Maze maze)
+(int price, ImmutableList<ImmutableList<(int x, int y)>> routes) FindAllCheapestPaths(Maze maze)
 {
     var seen = ImmutableHashSet<(int, int, Direction)>.Empty;
-    var workingSet = new PriorityQueue<(int x, int y, Direction direction, int price), int>();
-    workingSet.Enqueue((maze.Start.x, maze.Start.y, Direction.East, 0), 0);
+    var workingSet = new PriorityQueue<(int x, int y, Direction direction, int price, ImmutableList<(int x, int y)> previous), int>();
+    workingSet.Enqueue((maze.Start.x, maze.Start.y, Direction.East, 0, []), 0);
+    workingSet.Enqueue((maze.Start.x, maze.Start.y, Direction.North, 1000, []), 1000);
+    workingSet.Enqueue((maze.Start.x, maze.Start.y, Direction.South, 1000, []), 1000);
+
+    var bestAtEndSoFar = (price: int.MaxValue, routes: ImmutableList<ImmutableList<(int x, int y)>>.Empty);
 
     var bestAt = ImmutableDictionary<(int x, int y, Direction direction), int>.Empty;
 
@@ -19,32 +23,42 @@ int FindCheapestPath(Maze maze)
     while (workingSet.Count > 0)
     {
         steps++;
-        var (x, y, direction, price) = workingSet.Dequeue();
+        var (x, y, direction, price, previous) = workingSet.Dequeue();
 
         Console.SetCursorPosition(0, 0);
         Console.Write(maze.ToString(workingSet.UnorderedItems.Select(t => (t.Element.x, t.Element.y)).ToImmutableHashSet()));
         // Console.WriteLine();
-        Console.Write($"Steps: {steps}, current: {x},{y}, {direction}, {price}, working set size: {workingSet.Count}           ");
+        Console.WriteLine($"Steps: {steps}, current: {x},{y}, {direction}, {price}");
+        Console.WriteLine($"Working set size: {workingSet.Count}           ");
+        Console.WriteLine($"Best so far: {bestAtEndSoFar.routes.Count} routes at {bestAtEndSoFar.price}");
         // Console.WriteLine("Working set:");
         // foreach (var p in workingSet.Take(60))
         //     Console.WriteLine($"  {p.x},{p.y}, {p.direction}, {p.price}         ");
         // Console.WriteLine("Press enter to continue...");
         // Console.ReadLine();
 
-        if (seen.Contains((x, y, direction)))
+        if (price > bestAtEndSoFar.price)
             continue;
-        ImmutableInterlocked.Update(ref seen, s => s.Add((x, y, direction)));
+
+        if (ImmutableInterlocked.AddOrUpdate(ref bestAt,
+                                             (x, y, direction),
+                                             price,
+                                             (_, c) => Math.Min(c, price)) < price)
+            continue;
 
         switch (maze[x, y])
         {
             case Tile.End:
+                if (price == bestAtEndSoFar.price)
+                    bestAtEndSoFar = (bestAtEndSoFar.price, routes: bestAtEndSoFar.routes.Add(previous.Add((x, y))));
+                else if (price < bestAtEndSoFar.price)
+                    bestAtEndSoFar = (price, [previous.Add((x, y))]);
+
                 Console.WriteLine();
-                return price;
+                break;
 
-            case Tile.Wall:
-                continue;
-
-            default:
+            case Tile.Start:
+            case Tile.Empty:
                 var (nextX, nextY, nextDirectionClockwise, nextDirectionCounterClockwise) = direction switch
                 {
                     Direction.West => (x - 1, y, Direction.North, Direction.South),
@@ -54,19 +68,28 @@ int FindCheapestPath(Maze maze)
                     _ => throw new ArgumentOutOfRangeException()
                 };
 
-                workingSet.Enqueue((nextX, nextY, direction, price + 1), price + 1);
-                workingSet.Enqueue((x, y, nextDirectionClockwise, price + 1000), price + 1000);
-                workingSet.Enqueue((x, y, nextDirectionCounterClockwise, price + 1000), price + 1000);
+                if (previous.Contains((nextX, nextY)))
+                    continue;
+                if (maze[nextX, nextY] is Tile.Wall)
+                    continue;
+
+                previous = previous.Add((x, y));
+                workingSet.Enqueue((nextX, nextY, direction, price + 1, previous), price + 1);
+                workingSet.Enqueue((nextX, nextY, nextDirectionClockwise, price + 1 + 1000, previous), price + 1000);
+                workingSet.Enqueue((nextX, nextY, nextDirectionCounterClockwise, price + 1 + 1000, previous), price + 1000);
 
                 break;
         }
     }
 
-    throw new Exception("Cannot find path");
+    return bestAtEndSoFar;
 }
 
-var cheapestPath = FindCheapestPath(inputMaze);
+var (cheapestPath, bestRoutes) = FindAllCheapestPaths(inputMaze);
 Console.WriteLine($"Cheapest path: {cheapestPath}");
+Console.WriteLine("All best routes:");
+Console.WriteLine(string.Join("\n", bestRoutes.Select(r => $"  {string.Join(", ", r)}")));
+Console.WriteLine($"Unique tiles in all best routes: {bestRoutes.SelectMany(r => r).Distinct().Count()}");
 
 internal enum Direction
 {
@@ -88,13 +111,12 @@ internal class Maze(int width, int height)
 {
     private readonly Tile[,] _maze = new Tile[width, height];
 
-    public (int x, int y) End { get; }
     public (int x, int y) Start { get; }
 
     public Tile this[int x, int y]
     {
         get => _maze[x, y];
-        set => _maze[x, y] = value;
+        private init => _maze[x, y] = value;
     }
 
     public Maze(string[] input)
@@ -115,8 +137,6 @@ internal class Maze(int width, int height)
 
             if (tile == Tile.Start)
                 Start = (x, y);
-            else if (tile == Tile.End)
-                End = (x, y);
         }
     }
 
