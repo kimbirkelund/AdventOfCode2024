@@ -1,26 +1,49 @@
 ﻿using System.Collections.Immutable;
 using System.Text.RegularExpressions;
 
-var input = File.ReadAllLines("test-input.txt");
+var input = File.ReadAllLines("input.txt");
 
 var progs = Prog.Parse(input);
 
 foreach (var prog in progs)
 {
-    Console.WriteLine(prog);
+    var initialA = prog.InitialMachine.A;
+    Machine machine;
+    do
+    {
+        Console.WriteLine($"Initial A: {initialA}");
+        machine = prog.InitialMachine with { A = initialA };
+        Console.WriteLine(machine.ToString());
+        while (machine.InstructionCounter < prog.Instructions.Count)
+        {
+            Console.WriteLine($"Instruction: {prog.Instructions[machine.InstructionCounter]} {prog.Instructions[machine.InstructionCounter].Description}");
 
-    var machine = prog.InitialMachine;
-    while (machine.InstructionCounter < prog.Instructions.Count)
-        machine = prog.Instructions[machine.InstructionCounter].Execute(machine);
+            machine = prog.Instructions[machine.InstructionCounter].Execute(machine);
 
-    Console.WriteLine("Result:");
-    Console.WriteLine(machine);
+            Console.WriteLine(machine);
 
-    Console.WriteLine("Expectations:");
-    foreach (var expectation in prog.Expectations)
-        Console.WriteLine($"  {expectation}: {expectation.IsSatisfied(machine)}");
+            Console.WriteLine("Press enter to continue...");
+            Console.ReadLine();
+        }
 
-    Console.WriteLine("---");
+        Console.WriteLine("Result:");
+        Console.WriteLine(machine);
+
+        Console.WriteLine("Expectations:");
+        foreach (var expectation in prog.Expectations)
+            Console.WriteLine($"  {expectation}: {expectation.IsSatisfied(machine)}");
+
+        Console.WriteLine("---");
+
+        initialA = (machine.Output.Count - prog.Instructions.Count * 2) switch
+        {
+            > 0 => initialA - 1,
+            0 => initialA + 1,
+            var diff and < 0 => initialA + Math.Abs(diff) * 434343
+        };
+        if (initialA <= 0)
+            return;
+    } while (prog.Expectations.Any(e => !e.IsSatisfied(machine)));
 }
 
 public class Prog(IReadOnlyList<Instruction> instructions, Machine initialMachine, IReadOnlyCollection<IExpectation> expectations)
@@ -173,16 +196,16 @@ public interface IExpectation
 
 public record Machine
 {
-    public int A { get; init; }
-    public int B { get; init; }
-    public int C { get; init; }
+    public long A { get; init; }
+    public long B { get; init; }
+    public long C { get; init; }
     public int InstructionCounter { get; init; }
     public ImmutableList<int> Output { get; init; } = ImmutableList<int>.Empty;
 
     public Machine AppendOutput(int value)
         => this with { Output = Output.Add(value) };
 
-    public int EvaluateComboOperand(int operand)
+    public long EvaluateComboOperand(int operand)
     {
         return operand switch
         {
@@ -214,6 +237,7 @@ public record Machine
 
 public abstract class Instruction(int operand)
 {
+    public abstract string Description { get; }
     public abstract int Opcode { get; }
     public int Operand { get; } = operand;
 
@@ -245,6 +269,7 @@ public abstract class NonJumpInstructionBase(int operand) : Instruction(operand)
 
 public class AdvInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"A = A / 2^combo({Operand})";
     public override int Opcode => 0;
 
     public override Machine Execute(Machine machine)
@@ -256,6 +281,7 @@ public class AdvInstruction(int operand) : NonJumpInstructionBase(operand)
 
 public class BxlInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"B = B xor {Operand}";
     public override int Opcode => 1;
 
     public override Machine Execute(Machine machine)
@@ -267,6 +293,7 @@ public class BxlInstruction(int operand) : NonJumpInstructionBase(operand)
 
 public class BstInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"B = combo({Operand}) % 8";
     public override int Opcode => 2;
 
     public override Machine Execute(Machine machine)
@@ -280,6 +307,7 @@ public class BstInstruction(int operand) : NonJumpInstructionBase(operand)
 
 public class JnzInstruction(int operand) : Instruction(operand)
 {
+    public override string Description => "A == 0 ? IC + 1 : IC = Operand";
     public override int Opcode => 3;
 
     public override Machine Execute(Machine machine)
@@ -292,6 +320,7 @@ public class JnzInstruction(int operand) : Instruction(operand)
 
 public class BxcInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => "B = B xor C";
     public override int Opcode => 4;
 
     public override Machine Execute(Machine machine)
@@ -303,14 +332,16 @@ public class BxcInstruction(int operand) : NonJumpInstructionBase(operand)
 
 public class OutInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"OUT combo({Operand}) % 8";
     public override int Opcode => 5;
 
     public override Machine Execute(Machine machine)
-        => base.Execute(machine.AppendOutput(machine.EvaluateComboOperand(Operand) % 8));
+        => base.Execute(machine.AppendOutput((int)(machine.EvaluateComboOperand(Operand) % 8)));
 }
 
 public class BdvInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"B = A / 2^combo({Operand})";
     public override int Opcode => 6;
 
     public override Machine Execute(Machine machine)
@@ -322,6 +353,7 @@ public class BdvInstruction(int operand) : NonJumpInstructionBase(operand)
 
 public class CdvInstruction(int operand) : NonJumpInstructionBase(operand)
 {
+    public override string Description => $"C = A / 2^combo({Operand})";
     public override int Opcode => 7;
 
     public override Machine Execute(Machine machine)
